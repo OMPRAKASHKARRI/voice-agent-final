@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Voice AI Agent</title>
+  <style>
+    body {
+      font-family: 'Segoe UI';
+      background: #0f172a;
+      color: white;
+      padding: 20px;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
+    #container {
+      max-width: 600px;
+      margin: auto;
+    }
+
+    #chat {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 10px;
+      height: 400px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+
+    .msg {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 8px;
+      max-width: 75%;
+    }
+
+    .user {
+      background: #2563eb;
+      margin-left: auto;
+    }
+
+    .ai {
+      background: #334155;
+    }
+
+    #controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+    }
+
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      background: #22c55e;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #status {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .listening { color: #22c55e; }
+    .processing { color: orange; }
+  </style>
+</head>
+
+<body>
+
+<div id="container">
+  <h2>🎤 Voice Appointment Agent</h2>
+
+  <div id="chat"></div>
+
+  <div id="controls">
+    <input id="textInput" placeholder="Type message..." />
+    <button onclick="sendText()">Send</button>
+    <button onclick="start()">🎙</button>
+  </div>
+
+  <p id="status">Idle</p>
+</div>
+
+<script>
+const ws = new WebSocket("ws://localhost:8000/ws");
+
+let isListening = false;
+let lastSent = "";   // 🧠 prevent duplicates
+
+// 🔊 Voice output (safe)
+function speak(text) {
+  speechSynthesis.cancel(); // stop previous
+
+  const speech = new SpeechSynthesisUtterance(text);
+  speech.lang = "en-US";
+
+  speechSynthesis.speak(speech);
+}
+
+// 💬 UI
+function addMessage(text, type) {
+  const chat = document.getElementById("chat");
+
+  const div = document.createElement("div");
+  div.className = "msg " + type;
+  div.innerText = text;
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// 📩 Receive
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  addMessage(data.text, "ai");
+
+  speak(data.text);
+
+  document.getElementById("status").innerText = "Idle";
+};
+
+// ✍️ Send text (with duplicate protection)
+function sendToServer(text) {
+  text = text.trim().toLowerCase();
+
+  if (!text || text === lastSent) return; // 🛑 prevent loop
+
+  lastSent = text;
+
+  addMessage(text, "user");
+  ws.send(text);
+
+  document.getElementById("status").innerText = "Processing...";
+}
+
+// ✍️ Button send
+function sendText() {
+  const input = document.getElementById("textInput");
+  sendToServer(input.value);
+  input.value = "";
+}
+
+// 🎤 Voice input (FINAL FIX)
+function start() {
+  if (isListening) return;
+
+  isListening = true;
+
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+
+  recognition.lang = "en-US";
+  recognition.continuous = false;
+  recognition.interimResults = true; // 👈 allow interim
+
+  let finalText = "";
+  let timer;
+
+  recognition.start();
+
+  document.getElementById("status").innerText = "Listening...";
+  document.getElementById("status").className = "listening";
+
+  recognition.onresult = (event) => {
+    let transcript = "";
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+
+    finalText = transcript.trim();
+
+    // 🛑 reset timer every time user is speaking
+    clearTimeout(timer);
+
+    timer = setTimeout(() => {
+      recognition.stop();
+      isListening = false;
+
+      // ❗ ignore small/partial words
+      if (finalText.length < 4) return;
+
+      sendToServer(finalText);
+    }, 800); // wait for user to finish speaking
+  };
+
+  recognition.onerror = () => {
+    isListening = false;
+    document.getElementById("status").innerText = "Mic error";
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+  };
+}
+
+</script>
+</body>
+</html>
