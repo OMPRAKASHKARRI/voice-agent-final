@@ -1,12 +1,5 @@
+import os
 import psycopg2
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="voice_ai",
-    user="postgres",
-    password="admin123",   # your password
-    port="5432"
-)
-
-conn.autocommit = True
+conn = psycopg2.connect(os.getenv("DATABASE_URL"))
 cursor = conn.cursor()
