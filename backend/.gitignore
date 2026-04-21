@@ -1,2 +1,14 @@
-backend/.env
+# env files
 .env
+backend/.env
+
+# python
+__pycache__/
+*.pyc
+
+# node (if any)
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
